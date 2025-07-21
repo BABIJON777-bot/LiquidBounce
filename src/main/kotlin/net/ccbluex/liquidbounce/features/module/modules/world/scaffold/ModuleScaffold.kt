@@ -589,13 +589,36 @@ object ModuleScaffold : ClientModule("Scaffold", Category.WORLD) {
         val placeableSlots = findPlaceableSlots()
         val doNotUseBelowCount = ScaffoldAutoBlockFeature.doNotUseBelowCount
 
-        val (slot, _) = placeableSlots
-            .filter { (_, stack) -> stack.count > doNotUseBelowCount }
-            .maxWithOrNull { o1, o2 -> BLOCK_COMPARATOR_FOR_HOTBAR.compare(o1.value(), o2.value()) }
-            ?: placeableSlots.maxWithOrNull { o1, o2 -> BLOCK_COMPARATOR_FOR_HOTBAR.compare(o1.value(), o2.value()) }
-            ?: return null
+        if (ScaffoldAutoBlockFeature.random) {
 
-        return slot
+            val (slot, _) = placeableSlots
+                .filter { (_, stack) -> stack.count > doNotUseBelowCount }
+                .maxWithOrNull { o1, o2 -> BLOCK_COMPARATOR_FOR_HOTBAR.compare(o2.value(), o1.value()) }
+                ?: placeableSlots.maxWithOrNull { o1, o2 ->
+                    BLOCK_COMPARATOR_FOR_HOTBAR.compare(
+                        o2.value(),
+                        o1.value()
+                    )
+                }
+                ?: return null
+
+            return slot
+
+        } else {
+
+            val (slot, _) = placeableSlots
+                .filter { (_, stack) -> stack.count > doNotUseBelowCount }
+                .maxWithOrNull { o1, o2 -> BLOCK_COMPARATOR_FOR_HOTBAR.compare(o1.value(), o2.value()) }
+                ?: placeableSlots.maxWithOrNull { o1, o2 ->
+                    BLOCK_COMPARATOR_FOR_HOTBAR.compare(
+                        o1.value(),
+                        o2.value()
+                    )
+                }
+                ?: return null
+
+            return slot
+        }
     }
 
     internal fun isValidCrosshairTarget(rayTraceResult: BlockHitResult): Boolean {
@@ -679,7 +702,7 @@ object ModuleScaffold : ClientModule("Scaffold", Category.WORLD) {
 
     private fun handleSilentBlockSelection(hasBlockInMainHand: Boolean, hasBlockInOffHand: Boolean): Boolean {
         // Handle silent block selection
-        if (ScaffoldAutoBlockFeature.enabled && !hasBlockInMainHand && !hasBlockInOffHand) {
+        if (ScaffoldAutoBlockFeature.enabled && !hasBlockInOffHand) {
             val bestMainHandSlot = findBestValidHotbarSlotForTarget()
 
             if (bestMainHandSlot != null) {
@@ -698,5 +721,4 @@ object ModuleScaffold : ClientModule("Scaffold", Category.WORLD) {
 
         return hasBlockInMainHand
     }
-
 }

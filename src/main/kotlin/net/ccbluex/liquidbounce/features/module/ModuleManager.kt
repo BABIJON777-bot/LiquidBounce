@@ -80,6 +80,7 @@ import net.ccbluex.liquidbounce.features.module.modules.world.autobuild.ModuleAu
 import net.ccbluex.liquidbounce.features.module.modules.world.autofarm.ModuleAutoFarm
 import net.ccbluex.liquidbounce.features.module.modules.world.fucker.ModuleFucker
 import net.ccbluex.liquidbounce.features.module.modules.world.nuker.ModuleNuker
+import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ModuleScaffold
 import net.ccbluex.liquidbounce.features.module.modules.world.packetmine.ModulePacketMine
 import net.ccbluex.liquidbounce.features.module.modules.world.traps.ModuleAutoTrap
 import net.ccbluex.liquidbounce.script.ScriptApiRequired
@@ -385,6 +386,7 @@ object ModuleManager : EventListener, Iterable<ClientModule> by modules {
             ModuleSkinChanger,
 
             // World
+            ModuleScaffold,
             ModuleClutch,
             ModuleAutoBuild,
             ModuleAutoDisable,

@@ -88,7 +88,7 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
     private var time : Long = 0;
     private val delay by intRange("Delay", 0..0, 0..40, "ticks")
     private val ledgeTime by float("LedgeTime", 1f, 0f..4f)
-    private val safeWalkTime by float("SafeWalkTime", 1f, 0f..4f)
+    private val predictTicks by intRange("PredictTicks", 0..3, 0..40, "ticks")
     private val distAirCheck by int("DistAirCheck", 0, 0..128)
     private val timer by float("Timer", 1f, 0.01f..10f)
 
@@ -527,6 +527,7 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
                 }
             }
         }
+        if (clutching) time = Date().time
         return clutching
     }
 
@@ -534,7 +535,7 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
 
         var ticks = 0
         val simulation = PlayerSimulationCache.getSimulationForLocalPlayer()
-        val predictedState = simulation.simulateBetween(0..5)
+        val predictedState = simulation.simulateBetween(if (Date().time - time <= 1000) predictTicks else 0..0)
         return (predictedState.firstNotNullOfOrNull {
             ticks++
             if (!it.onGround) {
@@ -570,7 +571,7 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
                     }
                 }
                 if (clutching) {
-                    println(ticks)
+                    time = Date().time
                     return@firstNotNullOfOrNull true
                 }
             }
@@ -635,14 +636,40 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
         val placeableSlots = findPlaceableSlots()
         val doNotUseBelowCount = ScaffoldAutoBlockFeature.doNotUseBelowCount
 
-        val (slot, _) = placeableSlots
-            .filter { (_, stack) -> stack.count > doNotUseBelowCount }
-            .maxWithOrNull { o1, o2 -> BLOCK_COMPARATOR_FOR_HOTBAR.compare(o1.value(), o2.value()) }
-            ?: placeableSlots.maxWithOrNull { o1, o2 -> BLOCK_COMPARATOR_FOR_HOTBAR.compare(o1.value(), o2.value()) }
-            ?: return null
+        if (ScaffoldAutoBlockFeature.random) {
 
-        return slot
+            val (slot, _) = placeableSlots
+                .filter { (_, stack) -> stack.count > doNotUseBelowCount }
+                .maxWithOrNull { o1, o2 -> BLOCK_COMPARATOR_FOR_HOTBAR.compare(o2.value(), o1.value()) }
+                ?: placeableSlots.maxWithOrNull { o1, o2 ->
+                    BLOCK_COMPARATOR_FOR_HOTBAR.compare(
+                        o2.value(),
+                        o1.value()
+                    )
+                }
+                ?: return null
+
+            return slot
+
+        } else {
+
+            val (slot, _) = placeableSlots
+                .filter { (_, stack) -> stack.count > doNotUseBelowCount }
+                .maxWithOrNull { o1, o2 -> BLOCK_COMPARATOR_FOR_HOTBAR.compare(o1.value(), o2.value()) }
+                ?: placeableSlots.maxWithOrNull { o1, o2 ->
+                    BLOCK_COMPARATOR_FOR_HOTBAR.compare(
+                        o1.value(),
+                        o2.value()
+                    )
+                }
+                ?: return null
+
+            return slot
+        }
     }
+
+
+
 
     internal fun isValidCrosshairTarget(rayTraceResult: BlockHitResult): Boolean {
         val diff = rayTraceResult.pos - player.eyePos
@@ -713,7 +740,7 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
 
     private fun handleSilentBlockSelection(hasBlockInMainHand: Boolean, hasBlockInOffHand: Boolean): Boolean {
         // Handle silent block selection
-        if (ScaffoldAutoBlockFeature.enabled && !hasBlockInMainHand && !hasBlockInOffHand) {
+        if (ScaffoldAutoBlockFeature.enabled && !hasBlockInOffHand) {
             val bestMainHandSlot = findBestValidHotbarSlotForTarget()
 
             if (bestMainHandSlot != null) {
