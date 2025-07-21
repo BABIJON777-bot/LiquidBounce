@@ -21,8 +21,6 @@ package net.ccbluex.liquidbounce.features.module.modules.world
 import it.unimi.dsi.fastutil.ints.IntObjectPair
 import net.ccbluex.liquidbounce.config.types.NamedChoice
 import net.ccbluex.liquidbounce.config.types.nesting.ToggleableConfigurable
-import net.ccbluex.liquidbounce.event.EventManager
-import net.ccbluex.liquidbounce.event.events.BlockCountChangeEvent
 import net.ccbluex.liquidbounce.event.events.MovementInputEvent
 import net.ccbluex.liquidbounce.event.events.RotationUpdateEvent
 import net.ccbluex.liquidbounce.event.handler
@@ -32,7 +30,6 @@ import net.ccbluex.liquidbounce.features.module.ClientModule
 import net.ccbluex.liquidbounce.features.module.modules.movement.ModuleSafeWalk
 import net.ccbluex.liquidbounce.features.module.modules.player.nofall.modes.NoFallBlink
 import net.ccbluex.liquidbounce.features.module.modules.render.ModuleDebug
-import net.ccbluex.liquidbounce.features.module.modules.render.ModuleDebug.debugParameter
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ModuleScaffold
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ModuleScaffold.ScaffoldRotationConfigurable.RotationTimingMode.*
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ModuleScaffold.ScaffoldRotationConfigurable.considerInventory
@@ -40,9 +37,6 @@ import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ModuleSca
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ScaffoldBlockItemSelection.isValidBlock
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ScaffoldMovementPlanner
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features.*
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.techniques.ScaffoldBreezilyTechnique
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.techniques.ScaffoldExpandTechnique
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.techniques.ScaffoldGodBridgeTechnique
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.techniques.ScaffoldNormalTechnique
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.techniques.normal.ScaffoldDownFeature
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.techniques.normal.ScaffoldEagleFeature
@@ -57,6 +51,7 @@ import net.ccbluex.liquidbounce.utils.block.targetfinding.BlockPlacementTarget
 import net.ccbluex.liquidbounce.utils.clicking.Clicker
 import net.ccbluex.liquidbounce.utils.client.SilentHotbar
 import net.ccbluex.liquidbounce.utils.client.Timer
+import net.ccbluex.liquidbounce.utils.entity.PlayerSimulationCache
 import net.ccbluex.liquidbounce.utils.entity.moving
 import net.ccbluex.liquidbounce.utils.entity.rotation
 import net.ccbluex.liquidbounce.utils.item.*
@@ -71,7 +66,6 @@ import net.ccbluex.liquidbounce.utils.math.toVec3d
 import net.ccbluex.liquidbounce.utils.movement.DirectionalInput
 import net.ccbluex.liquidbounce.utils.render.placement.PlacementRenderer
 import net.ccbluex.liquidbounce.utils.sorting.ComparatorChain
-import net.minecraft.block.Blocks
 import net.minecraft.entity.EntityPose
 import net.minecraft.item.*
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.Full
@@ -80,9 +74,8 @@ import net.minecraft.util.hit.BlockHitResult
 import net.minecraft.util.hit.HitResult
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.Direction
-import net.minecraft.util.shape.VoxelShapes
+import net.minecraft.util.math.Vec3d
 import java.util.Date
-import kotlin.math.abs
 
 /**
  * Scaffold module
@@ -169,6 +162,15 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
         }
 
     }
+
+    internal val technique = choices(
+        "Technique",
+        ScaffoldNormalTechnique,
+        arrayOf(
+            ScaffoldNormalTechnique
+        )
+    ).apply(ModuleClutch::tagBy)
+
 
     private var currentTarget: BlockPlacementTarget? = null
 
@@ -263,7 +265,7 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
             ModuleDebug.DebuggedPoint(predictedPos, Color4b(0, 255, 0, 255), size = 0.1)
         )
 
-        val target = ScaffoldNormalTechnique.findPlacementTarget(predictedPos, predictedPose, optimalLine, bestStack)
+        val target = technique.activeChoice.findPlacementTarget(predictedPos, predictedPose, optimalLine, bestStack)
             .also { this.currentTarget = it }
 
         // Debug stuff
@@ -285,7 +287,7 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
 
         // Do not aim yet in SKIP mode, since we want to aim at the block only when we are about to place it
         if (rotationTiming == NORMAL) {
-            val rotation = ScaffoldNormalTechnique.getRotations(target)
+            val rotation = technique.activeChoice.getRotations(target)
 
             RotationManager.setRotationTarget(
                 rotation ?: return@handler,
@@ -388,7 +390,7 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
         } else {
             RotationManager.currentRotation ?: player.rotation
         }.normalize()
-        val currentCrosshairTarget = ScaffoldNormalTechnique.getCrosshairTarget(target, currentRotation)
+        val currentCrosshairTarget = technique.activeChoice.getCrosshairTarget(target, currentRotation)
         val currentDelay = delay.random()
 
         var hasBlockInMainHand = isValidBlock(player.inventory.getStack(player.inventory.selectedSlot))
@@ -489,18 +491,19 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
         }
     }
 
-    private fun clutch(): Boolean {
+    private fun currentPosClutch() : Boolean {
         var clutching = false
-        val x = mc.player?.blockPos?.x
-        val y = mc.player?.blockPos?.y
-        val z = mc.player?.blockPos?.z
+        val x = player.blockPos.x
+        val y = player.blockPos.y
+        val z = player.blockPos.z
 
-        if (mc.player?.isOnGround == false) {
+        if (!player.isOnGround) {
+
             for (block in BlockPos.iterate(
                 BlockPos.ofFloored(
-                    (x!! - 6).toDouble(),
-                    y!!.toDouble(),
-                    (z!! - 6).toDouble()
+                    (x - 6).toDouble(),
+                    y.toDouble(),
+                    (z - 6).toDouble()
                 ),
                 BlockPos.ofFloored(
                     (x + 6).toDouble(),
@@ -524,10 +527,98 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
                 }
             }
         }
-        if (clutching) {
-            time = Date().time;
-        }
-        return clutching && !ModuleScaffold.enabled
+        return clutching
+    }
+
+    private fun clutch(): Boolean {
+
+        var ticks = 0
+        val simulation = PlayerSimulationCache.getSimulationForLocalPlayer()
+        val predictedState = simulation.simulateBetween(0..5)
+        return (predictedState.firstNotNullOfOrNull {
+            ticks++
+            if (!it.onGround) {
+                var clutching = false
+                val x = BlockPos.ofFloored(it.pos).x
+                val y = BlockPos.ofFloored(it.pos).y
+                val z = BlockPos.ofFloored(it.pos).z
+                for (block in BlockPos.iterate(
+                    BlockPos.ofFloored(
+                        (x - 6).toDouble(),
+                        y.toDouble(),
+                        (z - 6).toDouble()
+                    ),
+                    BlockPos.ofFloored(
+                        (x + 6).toDouble(),
+                        (y - 2).toDouble(),
+                        (z + 6).toDouble()
+                    )
+                )) {
+                    if (mc.world?.getBlockState(block)?.isAir == false) clutching = true
+                }
+
+                if (clutching) {
+                    for (i in 0..distAirCheck) {
+                        if (mc.world?.getBlockState(
+                                BlockPos.ofFloored(
+                                    x.toDouble(),
+                                    (y - i).toDouble(),
+                                    z.toDouble()
+                                )
+                            )?.isAir == false
+                        ) clutching = false
+                    }
+                }
+                if (clutching) {
+                    println(ticks)
+                    return@firstNotNullOfOrNull true
+                }
+            }
+            null
+        } ?: currentPosClutch()) && !ModuleScaffold.enabled
+
+//        println(predictedPos.pos.x)
+//        println(predictedPos.pos.y)
+//        println(predictedPos.pos.z)
+
+//        var clutching = false
+//        val x = BlockPos.ofFloored(predictedPos.pos).x
+//        val y = BlockPos.ofFloored(predictedPos.pos).y
+//        val z = BlockPos.ofFloored(predictedPos.pos).z
+//
+//        if (!predictedPos.onGround) {
+//            for (block in BlockPos.iterate(
+//                BlockPos.ofFloored(
+//                    (x - 6).toDouble(),
+//                    y.toDouble(),
+//                    (z - 6).toDouble()
+//                ),
+//                BlockPos.ofFloored(
+//                    (x + 6).toDouble(),
+//                    (y - 2).toDouble(),
+//                    (z + 6).toDouble()
+//                )
+//            )) {
+//                if (mc.world?.getBlockState(block)?.isAir == false) clutching = true
+//            }
+//
+//            if (clutching) {
+//                for (i in 0..distAirCheck) {
+//                    if (mc.world?.getBlockState(
+//                            BlockPos.ofFloored(
+//                                x.toDouble(),
+//                                (y - i).toDouble(),
+//                                z.toDouble()
+//                            )
+//                        )?.isAir == false
+//                    ) clutching = false
+//                }
+//            }
+//        }
+//        if (clutching) {
+//            time = Date().time;
+//        }
+//        return clutching && !ModuleScaffold.enabled
     }
 
     private fun findPlaceableSlots() = buildList<IntObjectPair<ItemStack>>(9) {
@@ -640,6 +731,9 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
         }
 
         return hasBlockInMainHand
+    }
+
+    private class Predicted(val onGround : Boolean, val pos : Vec3d) {
     }
 
 }

@@ -81,7 +81,6 @@ import net.ccbluex.liquidbounce.features.module.modules.world.autofarm.ModuleAut
 import net.ccbluex.liquidbounce.features.module.modules.world.fucker.ModuleFucker
 import net.ccbluex.liquidbounce.features.module.modules.world.nuker.ModuleNuker
 import net.ccbluex.liquidbounce.features.module.modules.world.packetmine.ModulePacketMine
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ModuleScaffold
 import net.ccbluex.liquidbounce.features.module.modules.world.traps.ModuleAutoTrap
 import net.ccbluex.liquidbounce.script.ScriptApiRequired
 import net.ccbluex.liquidbounce.utils.client.logger
@@ -400,7 +399,6 @@ object ModuleManager : EventListener, Iterable<ClientModule> by modules {
             ModuleNoSlowBreak,
             ModuleLiquidPlace,
             ModuleProjectilePuncher,
-            ModuleScaffold,
             ModuleTimer,
             ModuleNuker,
             ModuleExtinguish,
