@@ -386,6 +386,7 @@ object ModuleManager : EventListener, Iterable<ClientModule> by modules {
             ModuleSkinChanger,
 
             // World
+            ModuleClutch,
             ModuleAutoBuild,
             ModuleAutoDisable,
             ModuleAutoFarm,
