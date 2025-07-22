@@ -76,6 +76,7 @@ import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.Direction
 import net.minecraft.util.math.Vec3d
 import java.util.Date
+import kotlin.math.abs
 
 /**
  * Scaffold module
@@ -86,6 +87,7 @@ import java.util.Date
 object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
 
     private var time : Long = 0;
+    private val fallPredictTicks by intRange("FallPredictTicks", 5..5, 0..40, "ticks")
     private val delay by intRange("Delay", 0..0, 0..40, "ticks")
     private val ledgeTime by float("LedgeTime", 1f, 0f..4f)
     private val predictTicks by intRange("PredictTicks", 0..3, 0..40, "ticks")
@@ -531,10 +533,18 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
         return clutching
     }
 
+
+
+
     private fun clutch(): Boolean {
 
         var ticks = 0
         val simulation = PlayerSimulationCache.getSimulationForLocalPlayer()
+
+        if (simulation.simulateBetween(fallPredictTicks).firstNotNullOfOrNull {
+                if (it.onGround && abs(player.pos.y - it.pos.y) <= distAirCheck) it
+                else null
+            } != null) return false
         val predictedState = simulation.simulateBetween(if (Date().time - time <= 1000) predictTicks else 0..0)
         return (predictedState.firstNotNullOfOrNull {
             ticks++
@@ -557,6 +567,7 @@ object ModuleClutch : ClientModule("Clutch", Category.WORLD) {
                 )) {
                     if (mc.world?.getBlockState(block)?.isAir == false) clutching = true
                 }
+
 
                 if (clutching) {
                     for (i in 0..distAirCheck) {
